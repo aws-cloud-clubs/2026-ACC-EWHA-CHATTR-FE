@@ -1,20 +1,19 @@
 import type { ReactNode } from 'react'
-import { ChannelSidebar } from './ChannelSidebar'
-import { Header } from './Header'
 import { WorkspaceSidebar } from './WorkspaceSidebar'
 
 interface MainLayoutProps {
+  sidebar?: ReactNode
+  header?: ReactNode
   children: ReactNode
-  title: string
 }
 
-export function MainLayout({ children, title }: MainLayoutProps) {
+export function MainLayout({ children, header, sidebar }: MainLayoutProps) {
   return (
-    <div className="app-shell">
+    <div className={`app-shell ${sidebar ? 'app-shell-with-sidebar' : 'app-shell-main-only'}`}>
       <WorkspaceSidebar />
-      <ChannelSidebar />
+      {sidebar}
       <main className="main-panel">
-        <Header title={title} />
+        {header}
         {children}
       </main>
     </div>

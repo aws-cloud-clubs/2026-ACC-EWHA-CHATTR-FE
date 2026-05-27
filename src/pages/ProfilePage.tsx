@@ -1,3 +1,5 @@
+import { Header } from '../components/layout/Header'
+import { MainLayout } from '../components/layout/MainLayout'
 import { DeviceItem } from '../components/profile/DeviceItem'
 import { ProfileCard } from '../components/profile/ProfileCard'
 import type { Device, User } from '../types/user'
@@ -19,7 +21,8 @@ const devices: Device[] = [
 
 export function ProfilePage() {
   return (
-    <main className="page">
+    <MainLayout header={<Header title="Chattr" />}>
+      <div className="page">
       <ProfileCard user={user} />
       <section className="panel">
         <h2>Devices</h2>
@@ -27,6 +30,7 @@ export function ProfilePage() {
           <DeviceItem device={device} key={device.id} />
         ))}
       </section>
-    </main>
+      </div>
+    </MainLayout>
   )
 }

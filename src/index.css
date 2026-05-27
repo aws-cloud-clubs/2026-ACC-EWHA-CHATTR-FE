@@ -29,8 +29,15 @@ button {
 
 .app-shell {
   display: grid;
-  grid-template-columns: 72px 260px minmax(0, 1fr);
   min-height: 100vh;
+}
+
+.app-shell-with-sidebar {
+  grid-template-columns: 72px 260px minmax(0, 1fr);
+}
+
+.app-shell-main-only {
+  grid-template-columns: 72px minmax(0, 1fr);
 }
 
 .workspace-sidebar {
