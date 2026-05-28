@@ -6,6 +6,7 @@ import { Button } from '../components/common/Button'
 import { MainLayout } from '../components/layout/MainLayout'
 import { useWorkspaceStore } from '../stores/useWorkspaceStore'
 import type { WorkspaceMember } from '../types/workspace'
+import { getWorkspaceAccent } from '../utils/workspaceAccent'
 
 const staticWorkspaces = [
   {
@@ -85,8 +86,7 @@ function WorkspaceManageCard({
   onViewMembers: () => void
   workspace: WorkspaceManageCardData
 }) {
-  const visiblePreviewMembers =
-    workspace.members < 3 ? workspace.previewMembers.slice(0, 1) : workspace.previewMembers.slice(0, 2)
+  const visiblePreviewMembers = workspace.previewMembers.slice(0, Math.min(2, workspace.members))
 
   return (
     <article className="group overflow-hidden rounded-lg border border-slate-300 bg-white transition-shadow hover:shadow-md">
@@ -161,13 +161,13 @@ export function WorkspaceManagePage() {
   const workspaceMembersByWorkspaceId = useWorkspaceStore((state) => state.workspaceMembersByWorkspaceId)
   const pendingInvites = invites.filter((invite) => !acceptedInviteIds.includes(invite.id))
 
-  const displayedWorkspaces: WorkspaceManageCardData[] = storedWorkspaces.map((workspace) => {
+  const displayedWorkspaces: WorkspaceManageCardData[] = storedWorkspaces.map((workspace, index) => {
     const staticWorkspace = staticWorkspaces.find((item) => item.id === workspace.id)
     const workspaceMembers = workspaceMembersByWorkspaceId[workspace.id] ?? []
     const memberCount = workspaceMembers.length || 0
 
     return {
-      accent: staticWorkspace?.accent ?? '#0058BE',
+      accent: getWorkspaceAccent(index),
       badge: staticWorkspace?.badge ?? workspace.name.slice(0, 2),
       description: staticWorkspace?.description ?? '새로 추가된 워크스페이스입니다.',
       extraMembers: Math.max(0, memberCount - 2),

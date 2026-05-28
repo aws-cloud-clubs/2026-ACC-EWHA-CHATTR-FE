@@ -6,9 +6,9 @@ import { Avatar } from '../components/common/Avatar'
 import { ChannelSidebar } from '../components/layout/ChannelSidebar'
 import { MainLayout } from '../components/layout/MainLayout'
 import { WorkspaceRoleBadge } from '../components/workspace/WorkspaceRoleBadge'
-import { mockMessagesByRoomId } from '../mocks/mockMessages'
 import { currentUserId } from '../mocks/mockWorkspaceMembers'
 import { useChannelStore } from '../stores/useChannelStore'
+import { useMessageStore } from '../stores/useMessageStore'
 import { useWorkspaceStore } from '../stores/useWorkspaceStore'
 import type { Message } from '../types/message'
 import type { WorkspaceMember } from '../types/workspace'
@@ -190,21 +190,68 @@ function applyChannelMemberAuthors(messages: Message[], members: WorkspaceMember
 
 export function ChatPage() {
   const { activeChannelId, channelMemberIds, channels } = useChannelStore()
+  const { channelMessagesByRoomId, updateChannelMessages } = useMessageStore()
   const { activeWorkspaceId, workspaceMembers } = useWorkspaceStore()
+  const [replyTarget, setReplyTarget] = useState<Message | null>(null)
   const activeChannel = channels.find(
     (channel) => channel.id === activeChannelId && channel.workspaceId === activeWorkspaceId,
   )
-  const baseMessages = activeChannel ? (mockMessagesByRoomId[activeChannel.id] ?? []) : []
+  const baseMessages = activeChannel ? (channelMessagesByRoomId[activeChannel.id] ?? []) : []
   const messages = activeChannel
     ? applyChannelMemberAuthors(baseMessages, workspaceMembers, channelMemberIds[activeChannel.id] ?? [])
     : []
+  const currentAuthor = workspaceMembers.find((member) => member.user.id === currentUserId)?.user
+
+  const updateActiveMessages = (updater: (messages: Message[]) => Message[]) => {
+    if (!activeChannel) return
+
+    updateChannelMessages(activeChannel.id, updater)
+  }
+
+  const handleSendMessage = (content: string) => {
+    if (!activeChannel || !currentAuthor) return
+
+    const now = new Date()
+    const nextMessage: Message = {
+      id: `${activeChannel.id}-message-${now.getTime()}`,
+      roomId: activeChannel.id,
+      type: 'text',
+      content,
+      createdAt: now.toISOString(),
+      displayTime: '방금 전',
+      parentMessageId: replyTarget?.id,
+      replyPreview: replyTarget
+        ? {
+            authorName: replyTarget.author.name,
+            content: replyTarget.content,
+          }
+        : undefined,
+      author: currentAuthor,
+    }
+
+    updateActiveMessages((current) => [...current, nextMessage])
+    setReplyTarget(null)
+  }
 
   return (
     <MainLayout header={<ChannelHeader />} sidebar={<ChannelSidebar />}>
       {activeChannel ? (
         <>
-          <MessageList messages={messages} />
-          <ChatInput />
+          <MessageList
+            messages={messages}
+            onDeleteMessage={(messageId) =>
+              updateActiveMessages((current) => current.filter((message) => message.id !== messageId))
+            }
+            onEditMessage={(messageId, content) =>
+              updateActiveMessages((current) =>
+                current.map((message) =>
+                  message.id === messageId ? { ...message, content, updatedAt: new Date().toISOString() } : message,
+                ),
+              )
+            }
+            onReplyMessage={setReplyTarget}
+          />
+          <ChatInput onCancelReply={() => setReplyTarget(null)} onSend={handleSendMessage} replyTarget={replyTarget} />
         </>
       ) : (
         <div className="grid min-h-0 flex-1 place-items-center bg-[#fbfbff] px-6 text-center">

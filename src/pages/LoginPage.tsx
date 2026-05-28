@@ -1,8 +1,65 @@
 import { Gauge, MessageSquare, ShieldCheck } from 'lucide-react'
+import { useState } from 'react'
+import type { FormEvent } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Button } from '../components/common/Button'
 import { Input } from '../components/common/Input'
+import { useWorkspaceStore } from '../stores/useWorkspaceStore'
+
+interface SignupSnapshot {
+  email: string
+  nickname: string
+  password: string
+}
+
+function getSignupSnapshot(): SignupSnapshot | null {
+  const raw = localStorage.getItem('chattr-last-signup')
+  if (!raw) return null
+
+  try {
+    return JSON.parse(raw) as SignupSnapshot
+  } catch {
+    return null
+  }
+}
 
 export function LoginPage() {
+  const navigate = useNavigate()
+  const updateCurrentUserProfile = useWorkspaceStore((state) => state.updateCurrentUserProfile)
+  const signupSnapshot = getSignupSnapshot()
+  const [email, setEmail] = useState(signupSnapshot?.email ?? '')
+  const [password, setPassword] = useState('')
+  const [errorMessage, setErrorMessage] = useState('')
+
+  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const savedSignup = getSignupSnapshot()
+
+    if (!savedSignup) {
+      setErrorMessage('회원가입 후 로그인해주세요.')
+      return
+    }
+
+    if (email.trim() !== savedSignup.email || password !== savedSignup.password) {
+      setErrorMessage('이메일 또는 비밀번호가 일치하지 않습니다.')
+      return
+    }
+
+    localStorage.setItem(
+      'chattr-auth-session',
+      JSON.stringify({
+        accessToken: 'mock-access-token',
+        email: savedSignup.email,
+        nickname: savedSignup.nickname,
+      }),
+    )
+    updateCurrentUserProfile({
+      email: savedSignup.email,
+      name: savedSignup.nickname,
+    })
+    navigate('/workspaces/manage')
+  }
+
   return (
     <main className="flex min-h-screen flex-col bg-slate-50 text-slate-950">
       <header className="flex h-11 shrink-0 items-center px-4">
@@ -29,9 +86,7 @@ export function LoginPage() {
               <article className="rounded-lg border border-slate-300 bg-white p-5">
                 <Gauge aria-hidden className="text-[#0058BE]" size={20} strokeWidth={2.2} />
                 <h2 className="mt-3 text-base font-bold text-slate-950">실시간 동기화</h2>
-                <p className="mt-2 text-sm leading-5 text-slate-700">
-                  모든 기기에서 즉각적인 메시지 업데이트.
-                </p>
+                <p className="mt-2 text-sm leading-5 text-slate-700">모든 기기에서 즉각적인 메시지 업데이트.</p>
               </article>
 
               <article className="rounded-lg border border-slate-300 bg-white p-5">
@@ -44,30 +99,43 @@ export function LoginPage() {
             </div>
           </div>
 
-          <form className="rounded-xl border border-slate-300 bg-white px-7 py-7 shadow-2xl shadow-slate-300/60">
+          <form
+            className="rounded-xl border border-slate-300 bg-white px-7 py-7 shadow-2xl shadow-slate-300/60"
+            onSubmit={handleSubmit}
+          >
             <div className="text-center">
               <h2 className="text-2xl font-extrabold text-slate-950">반가워요!</h2>
-              <p className="mt-2 text-sm font-medium text-slate-700">
-                계정에 로그인하여 대화를 시작하세요.
-              </p>
+              <p className="mt-2 text-sm font-medium text-slate-700">계정에 로그인하여 대화를 시작하세요.</p>
             </div>
 
             <div className="mt-7 flex flex-col gap-3">
               <Input
+                className="min-h-10 text-base"
                 id="email"
                 label="이메일"
+                onChange={(event) => {
+                  setEmail(event.currentTarget.value)
+                  setErrorMessage('')
+                }}
                 placeholder="name@company.com"
                 type="email"
-                className="min-h-10 text-base"
+                value={email}
               />
               <Input
+                className="min-h-10 text-base"
                 id="password"
                 label="비밀번호"
+                onChange={(event) => {
+                  setPassword(event.currentTarget.value)
+                  setErrorMessage('')
+                }}
                 placeholder="••••••••"
                 type="password"
-                className="min-h-10 text-base"
+                value={password}
               />
             </div>
+
+            {errorMessage ? <p className="mt-3 text-sm font-semibold text-[#BA1A1A]">{errorMessage}</p> : null}
 
             <div className="mt-4 flex items-center justify-between gap-4 text-sm">
               <label className="flex items-center gap-2 font-medium text-slate-700">
@@ -89,11 +157,7 @@ export function LoginPage() {
             <div className="my-6 h-px bg-slate-200" />
 
             <Button className="min-h-10 w-full font-medium" variant="secondary">
-              <svg
-                aria-hidden
-                className="size-5 rounded-full bg-white shadow-sm ring-1 ring-slate-200"
-                viewBox="0 0 24 24"
-              >
+              <svg aria-hidden className="size-5 rounded-full bg-white shadow-sm ring-1 ring-slate-200" viewBox="0 0 24 24">
                 <path
                   fill="#4285F4"
                   d="M21.6 12.23c0-.74-.07-1.45-.19-2.13H12v4.03h5.38a4.6 4.6 0 0 1-1.99 3.02v2.46h3.22c1.88-1.74 2.99-4.3 2.99-7.38Z"
@@ -116,7 +180,7 @@ export function LoginPage() {
 
             <p className="mt-7 text-center text-sm font-medium text-slate-700">
               계정이 없으신가요?{' '}
-              <a className="font-semibold text-[#0058BE] hover:text-[#004EA8]" href="/login">
+              <a className="font-semibold text-[#0058BE] hover:text-[#004EA8]" href="/signup">
                 회원가입
               </a>
             </p>

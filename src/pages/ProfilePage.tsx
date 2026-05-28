@@ -89,11 +89,36 @@ export function ProfilePage() {
     })
   }
 
+  const resizeImageToAvatar = (source: CanvasImageSource, width: number, height: number) => {
+    const size = 160
+    const canvas = document.createElement('canvas')
+    const context = canvas.getContext('2d')
+    canvas.width = size
+    canvas.height = size
+
+    if (!context) return ''
+
+    const sourceSize = Math.min(width, height)
+    const sourceX = (width - sourceSize) / 2
+    const sourceY = (height - sourceSize) / 2
+
+    context.drawImage(source, sourceX, sourceY, sourceSize, sourceSize, 0, 0, size, size)
+    return canvas.toDataURL('image/jpeg', 0.82)
+  }
+
   const handleProfileImageChange = (file?: File) => {
     if (!file || !file.type.startsWith('image/')) return
 
-    saveAvatarUrl(URL.createObjectURL(file))
-    setAvatarMenuOpen(false)
+    const image = new Image()
+    image.onload = () => {
+      const nextAvatarUrl = resizeImageToAvatar(image, image.naturalWidth, image.naturalHeight)
+      if (nextAvatarUrl) {
+        saveAvatarUrl(nextAvatarUrl)
+      }
+      URL.revokeObjectURL(image.src)
+      setAvatarMenuOpen(false)
+    }
+    image.src = URL.createObjectURL(file)
   }
 
   const closeCamera = () => {
@@ -124,11 +149,10 @@ export function ProfilePage() {
     const video = videoRef.current
     if (!video) return
 
-    const canvas = document.createElement('canvas')
-    canvas.width = video.videoWidth
-    canvas.height = video.videoHeight
-    canvas.getContext('2d')?.drawImage(video, 0, 0, canvas.width, canvas.height)
-    saveAvatarUrl(canvas.toDataURL('image/png'))
+    const nextAvatarUrl = resizeImageToAvatar(video, video.videoWidth, video.videoHeight)
+    if (nextAvatarUrl) {
+      saveAvatarUrl(nextAvatarUrl)
+    }
     closeCamera()
   }
 

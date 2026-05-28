@@ -1,29 +1,66 @@
-import { useState } from 'react'
-import { Bold, Code2, Italic, Link, Plus } from 'lucide-react'
+import { Bold, Code2, Italic, Link, Plus, X } from 'lucide-react'
+import { useRef, useState } from 'react'
+import type { Message } from '../../types/message'
+import { getUserDisplayName } from '../../utils/userDisplay'
 
 interface ChatInputProps {
   compact?: boolean
   helperText?: string
+  onCancelReply?: () => void
+  onSend?: (content: string) => void
+  replyTarget?: Message | null
 }
 
-export function ChatInput({ compact = false, helperText }: ChatInputProps) {
+export function ChatInput({ compact = false, helperText, onCancelReply, onSend, replyTarget }: ChatInputProps) {
   const [message, setMessage] = useState('')
   const [hasAttachment, setHasAttachment] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const canSend = message.trim().length > 0 || hasAttachment
+
+  const handleSubmit = () => {
+    const content = message.trim()
+    if (!content && !hasAttachment) return
+
+    setMessage('')
+    setHasAttachment(false)
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
+
+    try {
+      onSend?.(content)
+    } catch (error) {
+      console.error('Failed to send message', error)
+    } finally {
+      onCancelReply?.()
+    }
+  }
 
   return (
     <form
       className={`border-t border-slate-200 bg-[#fbfbff] px-6 ${compact ? 'py-2.5' : 'py-4'}`}
       onSubmit={(event) => {
         event.preventDefault()
-
-        if (!canSend) return
-
-        setMessage('')
-        setHasAttachment(false)
+        handleSubmit()
       }}
     >
       <div className="overflow-hidden rounded-xl border border-slate-300 bg-white shadow-lg shadow-slate-300/40">
+        {replyTarget ? (
+          <div className="flex items-center justify-between border-b border-slate-200 bg-white px-4 py-1.5">
+            <p className="min-w-0 truncate text-xs font-medium text-slate-500">
+              <span className="font-semibold">@{getUserDisplayName(replyTarget.author)}</span>{' '}
+              <span>{replyTarget.content}</span>
+            </p>
+            <button
+              aria-label="답글 취소"
+              className="ml-3 grid size-5 shrink-0 place-items-center rounded-full bg-slate-200 text-slate-700 hover:bg-slate-300"
+              onClick={onCancelReply}
+              type="button"
+            >
+              <X size={13} />
+            </button>
+          </div>
+        ) : null}
         <div className={`flex items-center gap-3 border-b border-slate-200 px-4 text-slate-700 ${compact ? 'h-8' : 'h-9'}`}>
           <Bold size={16} />
           <Italic size={16} />
@@ -39,8 +76,9 @@ export function ChatInput({ compact = false, helperText }: ChatInputProps) {
             <Plus size={22} />
             <input
               className="sr-only"
-              type="file"
               onChange={(event) => setHasAttachment((event.currentTarget.files?.length ?? 0) > 0)}
+              ref={fileInputRef}
+              type="file"
             />
           </label>
           <input

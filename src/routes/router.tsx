@@ -3,6 +3,7 @@ import { ChatPage } from '../pages/ChatPage'
 import { DmPage } from '../pages/DmPage'
 import { LoginPage } from '../pages/LoginPage'
 import { ProfilePage } from '../pages/ProfilePage'
+import { SignupPage } from '../pages/SignupPage'
 import { WorkspaceManagePage } from '../pages/WorkspaceManagePage'
 import { WorkspaceMemberPage } from '../pages/WorkspaceMemberPage'
 
@@ -14,6 +15,10 @@ const router = createBrowserRouter([
   {
     path: '/login',
     element: <LoginPage />,
+  },
+  {
+    path: '/signup',
+    element: <SignupPage />,
   },
   {
     path: '/chat',

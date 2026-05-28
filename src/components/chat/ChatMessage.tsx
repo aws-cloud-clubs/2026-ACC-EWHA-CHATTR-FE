@@ -1,12 +1,17 @@
 import { Download, FileText, Image as ImageIcon } from 'lucide-react'
+import { useState } from 'react'
 import type { Message } from '../../types/message'
 import { formatDate } from '../../utils/formatDate'
 import { formatFileSize } from '../../utils/upload'
-import { getUserAvatarName, getUserDisplayName } from '../../utils/userDisplay'
+import { getUserAvatarName, getUserDisplayName, isCurrentUser } from '../../utils/userDisplay'
 import { Avatar } from '../common/Avatar'
+import { MessageActionToolbar } from './MessageActionToolbar'
 
 interface ChatMessageProps {
   message: Message
+  onDelete?: (messageId: string) => void
+  onEdit?: (messageId: string, content: string) => void
+  onReply?: (message: Message) => void
 }
 
 function MessageAvatar({ message }: ChatMessageProps) {
@@ -20,8 +25,11 @@ function MessageAvatar({ message }: ChatMessageProps) {
   )
 }
 
-export function ChatMessage({ message }: ChatMessageProps) {
+export function ChatMessage({ message, onDelete, onEdit, onReply }: ChatMessageProps) {
   const authorName = getUserDisplayName(message.author)
+  const canMutate = isCurrentUser(message.author)
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(message.content)
 
   const handleReplyPreviewClick = () => {
     if (!message.parentMessageId) return
@@ -32,8 +40,25 @@ export function ChatMessage({ message }: ChatMessageProps) {
     })
   }
 
+  const handleEditSave = () => {
+    const nextContent = draft.trim()
+    if (!nextContent) return
+
+    onEdit?.(message.id, nextContent)
+    setEditing(false)
+  }
+
   return (
-    <article className="relative grid scroll-mt-6 grid-cols-[2.5rem_minmax(0,1fr)] gap-3" id={message.id}>
+    <article className="group relative grid scroll-mt-6 grid-cols-[2.5rem_minmax(0,1fr)] gap-3" id={message.id}>
+      <MessageActionToolbar
+        canMutate={canMutate}
+        onDelete={() => onDelete?.(message.id)}
+        onEdit={() => {
+          setDraft(message.content)
+          setEditing(true)
+        }}
+        onReply={() => onReply?.(message)}
+      />
       {message.replyPreview ? (
         <span className="absolute left-[18px] top-[6px] h-[18px] w-[18px] rounded-tl-md border-l-2 border-t-2 border-slate-300" />
       ) : null}
@@ -65,7 +90,33 @@ export function ChatMessage({ message }: ChatMessageProps) {
             {message.displayTime ?? formatDate(message.createdAt)}
           </time>
         </div>
-        <p className="mt-1 text-sm leading-6 text-slate-800">{message.content}</p>
+        {editing ? (
+          <div className="mt-2 max-w-xl rounded-lg border border-slate-300 bg-white p-2 shadow-sm">
+            <textarea
+              className="min-h-20 w-full resize-none rounded-md bg-slate-50 p-2 text-sm leading-6 text-slate-800 outline-none focus:ring-2 focus:ring-[#0058BE]/20"
+              onChange={(event) => setDraft(event.currentTarget.value)}
+              value={draft}
+            />
+            <div className="mt-2 flex justify-end gap-2">
+              <button
+                className="rounded-md px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-100"
+                onClick={() => setEditing(false)}
+                type="button"
+              >
+                취소
+              </button>
+              <button
+                className="rounded-md bg-[#0058BE] px-3 py-1.5 text-xs font-bold text-white hover:bg-[#004EA8]"
+                onClick={handleEditSave}
+                type="button"
+              >
+                저장
+              </button>
+            </div>
+          </div>
+        ) : (
+          <p className="mt-1 text-sm leading-6 text-slate-800">{message.content}</p>
+        )}
 
         {message.attachments?.map((file) => (
           <a

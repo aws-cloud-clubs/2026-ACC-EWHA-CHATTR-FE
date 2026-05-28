@@ -5,6 +5,7 @@ import { WorkspaceMemberItem } from '../components/workspace/WorkspaceMemberItem
 import { currentUserId } from '../mocks/mockWorkspaceMembers'
 import { useWorkspaceStore } from '../stores/useWorkspaceStore'
 import type { WorkspaceMember } from '../types/workspace'
+import { getWorkspaceAccent } from '../utils/workspaceAccent'
 
 interface PermissionErrorState {
   message: string
@@ -53,12 +54,19 @@ export function WorkspaceMemberPage() {
   const activeWorkspace = useWorkspaceStore((state) =>
     state.workspaces.find((workspace) => workspace.id === activeWorkspaceId),
   )
+  const activeWorkspaceIndex = useWorkspaceStore((state) =>
+    Math.max(
+      0,
+      state.workspaces.findIndex((workspace) => workspace.id === activeWorkspaceId),
+    ),
+  )
   const workspaceMeta = workspaceMemberViewMeta[activeWorkspaceId as keyof typeof workspaceMemberViewMeta] ?? {
     accent: '#0058BE',
     badge: activeWorkspace?.name.slice(0, 2) ?? 'ws',
     memberCount: Math.max(1, activeWorkspaceMembers.length),
     name: activeWorkspace?.name ?? '워크스페이스',
   }
+  const workspaceAccent = getWorkspaceAccent(activeWorkspaceIndex)
   const displayedMembers = activeWorkspaceMembers
   const displayedMemberCount = activeWorkspaceMembers.length
   const currentWorkspaceRole =
@@ -127,7 +135,7 @@ export function WorkspaceMemberPage() {
             </div>
 
             <article className="overflow-hidden rounded-lg border border-slate-300 bg-white">
-              <div className="h-1.5" style={{ backgroundColor: workspaceMeta.accent }} />
+              <div className="h-1.5" style={{ backgroundColor: workspaceAccent }} />
               <div className="p-5">
                 <header className="flex items-center justify-between border-b border-slate-300 pb-4">
                   <div className="flex items-center gap-4">
