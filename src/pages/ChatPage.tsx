@@ -1,19 +1,21 @@
 import { Trash2, UserPlus, X } from 'lucide-react'
 import { useState, type MouseEvent } from 'react'
+import { messageApi } from '../api/messageApi'
+import { fileApi } from '../api/fileApi'
 import { ChatInput } from '../components/chat/ChatInput'
 import { MessageList } from '../components/chat/MessageList'
 import { Avatar } from '../components/common/Avatar'
 import { ChannelSidebar } from '../components/layout/ChannelSidebar'
 import { MainLayout } from '../components/layout/MainLayout'
 import { WorkspaceRoleBadge } from '../components/workspace/WorkspaceRoleBadge'
-import { currentUserId } from '../mocks/mockWorkspaceMembers'
+import { useAuthStore } from '../stores/useAuthStore'
 import { useChannelStore } from '../stores/useChannelStore'
 import { useMessageStore } from '../stores/useMessageStore'
 import { useWorkspaceStore } from '../stores/useWorkspaceStore'
 import type { Message } from '../types/message'
-import type { WorkspaceMember } from '../types/workspace'
+import { channelSocket } from '../websocket/channelSocket'
 
-function ChannelMemberModal({ onClose }: { onClose: () => void }) {
+function ChannelMemberModal({ activeUserId, onClose }: { activeUserId: string; onClose: () => void }) {
   const { activeChannelId, addChannelMembers, channelMemberIds } = useChannelStore()
   const { workspaceMembers } = useWorkspaceStore()
   const currentChannelMemberIds = activeChannelId ? (channelMemberIds[activeChannelId] ?? []) : []
@@ -23,7 +25,6 @@ function ChannelMemberModal({ onClose }: { onClose: () => void }) {
 
   const toggleMember = (memberId: string) => {
     if (currentChannelMemberIds.includes(memberId)) return
-
     setSelectedMemberIds((current) =>
       current.includes(memberId) ? current.filter((id) => id !== memberId) : [...current, memberId],
     )
@@ -80,7 +81,7 @@ function ChannelMemberModal({ onClose }: { onClose: () => void }) {
                   </span>
                   <span className="min-w-0 flex-1 truncate text-sm font-bold text-slate-800">
                     {member.user.name}
-                    {member.user.id === currentUserId ? <span className="ml-1 text-[#0058BE]">(나)</span> : null}
+                    {member.user.id === activeUserId ? <span className="ml-1 text-[#0058BE]">(나)</span> : null}
                   </span>
                   <WorkspaceRoleBadge role={member.role} />
                   <input
@@ -100,7 +101,6 @@ function ChannelMemberModal({ onClose }: { onClose: () => void }) {
             disabled={!canAdd}
             onClick={() => {
               if (!activeChannelId || !canAdd) return
-
               addChannelMembers(activeChannelId, newMemberIds)
               onClose()
             }}
@@ -119,21 +119,20 @@ function ChannelHeader() {
   const [permissionNotice, setPermissionNotice] = useState<{ left: number; top: number } | null>(null)
   const { activeChannelId, channels, deleteChannel } = useChannelStore()
   const deleteChannelMessages = useMessageStore((state) => state.deleteChannelMessages)
+  const authUser = useAuthStore((state) => state.user)
   const { activeWorkspaceId, workspaceMembers } = useWorkspaceStore()
+  const activeUserId = authUser?.id ?? ''
   const activeChannel = channels.find(
     (channel) => channel.id === activeChannelId && channel.workspaceId === activeWorkspaceId,
   )
   const hasActiveChannel = Boolean(activeChannel)
-  const currentRole = workspaceMembers.find((member) => member.user.id === currentUserId)?.role ?? 'member'
+  const currentRole = workspaceMembers.find((member) => member.user.id === activeUserId)?.role ?? 'member'
 
   const showPermissionNotice = (event: MouseEvent<HTMLButtonElement>) => {
     const rect = event.currentTarget.getBoundingClientRect()
-    const popupWidth = 300
-    const popupHeight = 84
-
     setPermissionNotice({
-      left: Math.max(16, Math.min(rect.right + 10, window.innerWidth - popupWidth - 16)),
-      top: Math.max(16, Math.min(rect.top - 10, window.innerHeight - popupHeight - 16)),
+      left: Math.max(16, Math.min(rect.right + 10, window.innerWidth - 316)),
+      top: Math.max(16, Math.min(rect.top - 10, window.innerHeight - 100)),
     })
   }
 
@@ -152,7 +151,9 @@ function ChannelHeader() {
 
   return (
     <header className="flex h-14 items-center justify-between border-b border-slate-300 bg-[#fbfbff] px-6">
-      {memberModalOpen && hasActiveChannel ? <ChannelMemberModal onClose={() => setMemberModalOpen(false)} /> : null}
+      {memberModalOpen && hasActiveChannel ? (
+        <ChannelMemberModal activeUserId={activeUserId} onClose={() => setMemberModalOpen(false)} />
+      ) : null}
       {permissionNotice ? (
         <div
           className="fixed z-40 w-[18.75rem] rounded-lg border border-slate-300 bg-white p-3 text-xs font-bold leading-5 text-slate-700 shadow-xl"
@@ -205,88 +206,52 @@ function ChannelHeader() {
   )
 }
 
-function getChannelMemberAuthors(members: WorkspaceMember[], memberIds: string[]) {
-  const memberById = new Map(members.map((member) => [member.user.id, member]))
-  const orderedMembers = memberIds.map((memberId) => memberById.get(memberId)).filter(Boolean) as WorkspaceMember[]
-
-  return orderedMembers.length > 0 ? orderedMembers : members.slice(0, 1)
-}
-
-function applyChannelMemberAuthors(messages: Message[], members: WorkspaceMember[], memberIds: string[]) {
-  const authors = getChannelMemberAuthors(members, memberIds)
-  if (authors.length === 0) return messages
-
-  const currentUserAuthor = authors[0]?.user
-
-  const nextMessages = messages.map((message, index) => {
-    const authorIndex = message.author.id === currentUserId ? 0 : Math.min(index + 1, authors.length - 1)
-    const author = authors[authorIndex]?.user ?? currentUserAuthor ?? message.author
-
-    return {
-      ...message,
-      author,
-    }
-  })
-
-  return nextMessages.map((message) => {
-    if (!message.replyPreview || !message.parentMessageId) return message
-
-    const parentMessage = nextMessages.find((item) => item.id === message.parentMessageId)
-    if (!parentMessage) return message
-
-    return {
-      ...message,
-      replyPreview: {
-        ...message.replyPreview,
-        authorName: parentMessage.author.name,
-      },
-    }
-  })
-}
-
 export function ChatPage() {
-  const { activeChannelId, channelMemberIds, channels, clearOpenedUnreadCount, openedUnreadCounts } = useChannelStore()
+  const { activeChannelId, channels, clearOpenedUnreadCount, openedUnreadCounts } = useChannelStore()
   const { channelMessagesByRoomId, updateChannelMessages } = useMessageStore()
-  const { activeWorkspaceId, workspaceMembers } = useWorkspaceStore()
+  const { activeWorkspaceId } = useWorkspaceStore()
+  const authUser = useAuthStore((state) => state.user)
   const [replyTarget, setReplyTarget] = useState<Message | null>(null)
   const activeChannel = channels.find(
     (channel) => channel.id === activeChannelId && channel.workspaceId === activeWorkspaceId,
   )
-  const baseMessages = activeChannel ? (channelMessagesByRoomId[activeChannel.id] ?? []) : []
-  const messages = activeChannel
-    ? applyChannelMemberAuthors(baseMessages, workspaceMembers, channelMemberIds[activeChannel.id] ?? [])
-    : []
-  const currentAuthor = workspaceMembers.find((member) => member.user.id === currentUserId)?.user
+  const messages = activeChannel ? (channelMessagesByRoomId[activeChannel.id] ?? []) : []
 
   const updateActiveMessages = (updater: (messages: Message[]) => Message[]) => {
     if (!activeChannel) return
-
     updateChannelMessages(activeChannel.id, updater)
   }
 
-  const handleSendMessage = (content: string) => {
-    if (!activeChannel || !currentAuthor) return
+  const handleSendMessage = async (content: string, file?: File) => {
+    if (!activeChannel) return
 
-    const now = new Date()
-    const nextMessage: Message = {
-      id: `${activeChannel.id}-message-${now.getTime()}`,
-      roomId: activeChannel.id,
-      type: 'text',
-      content,
-      createdAt: now.toISOString(),
-      displayTime: '방금 전',
-      parentMessageId: replyTarget?.id,
-      replyPreview: replyTarget
-        ? {
-            authorName: replyTarget.author.name,
-            content: replyTarget.content,
-          }
-        : undefined,
-      author: currentAuthor,
+    let attachments: { url: string; name: string; size: number; contentType: string }[] | undefined
+
+    if (file) {
+      const { presignedUrl, fileUrl } = await fileApi.getPresignedUrl(file.name, file.type)
+      await fileApi.uploadToS3(presignedUrl, file)
+      attachments = [{ url: fileUrl, name: file.name, size: file.size, contentType: file.type }]
     }
 
-    updateActiveMessages((current) => [...current, nextMessage])
+    channelSocket.sendMessage(activeChannel.id, content, {
+      parentMessageId: replyTarget?.id,
+      attachments,
+    })
     setReplyTarget(null)
+  }
+
+  const handleDeleteMessage = (messageId: string) => {
+    void messageApi.deleteMessage(messageId).then(() =>
+      updateActiveMessages((current) => current.filter((message) => message.id !== messageId)),
+    )
+  }
+
+  const handleEditMessage = (messageId: string, content: string) => {
+    void messageApi.editMessage(messageId, content).then((updated) =>
+      updateActiveMessages((current) =>
+        current.map((message) => (message.id === messageId ? updated : message)),
+      ),
+    )
   }
 
   return (
@@ -295,25 +260,19 @@ export function ChatPage() {
         <>
           <MessageList
             messages={messages}
-            onDeleteMessage={(messageId) =>
-              updateActiveMessages((current) => current.filter((message) => message.id !== messageId))
-            }
-            onEditMessage={(messageId, content) =>
-              updateActiveMessages((current) =>
-                current.map((message) =>
-                  message.id === messageId ? { ...message, content, updatedAt: new Date().toISOString() } : message,
-                ),
-              )
-            }
+            onDeleteMessage={handleDeleteMessage}
+            onEditMessage={handleEditMessage}
             onReadToBottom={() => {
-              if (activeChannel) {
-                clearOpenedUnreadCount(activeChannel.id)
-              }
+              if (activeChannel) clearOpenedUnreadCount(activeChannel.id)
             }}
             onReplyMessage={setReplyTarget}
             unreadCount={activeChannel ? openedUnreadCounts[activeChannel.id] : 0}
           />
-          <ChatInput onCancelReply={() => setReplyTarget(null)} onSend={handleSendMessage} replyTarget={replyTarget} />
+          <ChatInput
+            onCancelReply={() => setReplyTarget(null)}
+            onSend={(content, file) => { void handleSendMessage(content, file) }}
+            replyTarget={replyTarget}
+          />
         </>
       ) : (
         <div className="grid min-h-0 flex-1 place-items-center bg-[#fbfbff] px-6 text-center">

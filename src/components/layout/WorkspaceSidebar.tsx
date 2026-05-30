@@ -4,15 +4,12 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { Avatar } from '../common/Avatar'
 import { WorkspaceCard } from '../workspace/WorkspaceCard'
 import { WorkspaceRoleBadge } from '../workspace/WorkspaceRoleBadge'
-import { currentUserId } from '../../mocks/mockWorkspaceMembers'
 import { useAuthStore } from '../../stores/useAuthStore'
 import { useChannelStore } from '../../stores/useChannelStore'
 import { useDmStore } from '../../stores/useDmStore'
 import { useWorkspaceStore } from '../../stores/useWorkspaceStore'
 import type { User } from '../../types/user'
 import type { WorkspaceMember } from '../../types/workspace'
-import { clearTokens } from '../../utils/token'
-import { currentUserName } from '../../utils/userDisplay'
 
 interface PermissionNoticeState {
   left: number
@@ -67,7 +64,7 @@ function CreateWorkspaceModal({
   }
 
   const handleRoleClick = (member: WorkspaceMember, event: MouseEvent<HTMLButtonElement>) => {
-    if (member.user.id === currentUserId) {
+    if (member.user.id === owner.id) {
       const rect = event.currentTarget.getBoundingClientRect()
       const popupWidth = 312
       const popupHeight = 92
@@ -205,7 +202,7 @@ function CreateWorkspaceModal({
                 </span>
                 <span className="min-w-0 flex-1 truncate text-sm font-bold text-slate-800">
                   {member.user.name}
-                  {member.user.id === currentUserId ? <span className="ml-1 text-[#0058BE]">(나)</span> : null}
+                  {member.user.id === owner.id ? <span className="ml-1 text-[#0058BE]">(나)</span> : null}
                 </span>
                 <WorkspaceRoleBadge role={member.role} onClick={(event) => handleRoleClick(member, event)} />
               </div>
@@ -252,7 +249,8 @@ export function WorkspaceSidebar() {
   const isWorkspaceManagePage = location.pathname === '/workspaces/manage' || location.pathname === '/workspaces/members'
   const isChatPage = location.pathname === '/chat'
   const isDmPage = location.pathname === '/dm'
-  const setUser = useAuthStore((state) => state.setUser)
+  const authUser = useAuthStore((state) => state.user)
+  const logout = useAuthStore((state) => state.logout)
   const totalDmUnreadCount = useDmStore((state) =>
     Object.values(state.unreadCounts).reduce((total, count) => total + count, 0),
   )
@@ -265,24 +263,25 @@ export function WorkspaceSidebar() {
     workspaces,
   } = useWorkspaceStore()
   const { channels, setActiveChannelId, unreadCounts: channelUnreadCounts } = useChannelStore()
+  const activeUserId = authUser?.id ?? ''
   const currentMember =
     Object.values(workspaceMembersByWorkspaceId)
       .flat()
-      .find((member) => member.user.id === currentUserId) ??
-    workspaceMembers.find((member) => member.user.id === currentUserId)
-  const currentUser: User = currentMember?.user ?? {
-    id: currentUserId,
-    email: 'kim.chattr@example.com',
-    name: currentUserName,
+      .find((member) => member.user.id === activeUserId) ??
+    workspaceMembers.find((member) => member.user.id === activeUserId)
+  const currentUser: User = currentMember?.user ?? authUser ?? {
+    id: '',
+    email: '',
+    name: '',
     status: 'online',
   }
   const currentProfileName = currentUser.name
 
   const handleLogout = () => {
-    clearTokens()
-    setUser(null)
-    setLogoutOpen(false)
-    navigate('/login', { replace: true })
+    void logout().then(() => {
+      setLogoutOpen(false)
+      navigate('/login', { replace: true })
+    })
   }
 
   const handleWorkspaceSelect = (workspaceId: string) => {

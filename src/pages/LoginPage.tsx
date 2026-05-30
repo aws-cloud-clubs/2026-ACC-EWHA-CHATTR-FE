@@ -1,63 +1,31 @@
 import { Gauge, MessageSquare, ShieldCheck } from 'lucide-react'
 import { useState } from 'react'
-import type { FormEvent } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { Button } from '../components/common/Button'
 import { Input } from '../components/common/Input'
-import { useWorkspaceStore } from '../stores/useWorkspaceStore'
-
-interface SignupSnapshot {
-  email: string
-  nickname: string
-  password: string
-}
-
-function getSignupSnapshot(): SignupSnapshot | null {
-  const raw = localStorage.getItem('chattr-last-signup')
-  if (!raw) return null
-
-  try {
-    return JSON.parse(raw) as SignupSnapshot
-  } catch {
-    return null
-  }
-}
+import { useAuthStore } from '../stores/useAuthStore'
 
 export function LoginPage() {
   const navigate = useNavigate()
-  const updateCurrentUserProfile = useWorkspaceStore((state) => state.updateCurrentUserProfile)
-  const signupSnapshot = getSignupSnapshot()
-  const [email, setEmail] = useState(signupSnapshot?.email ?? '')
+  const login = useAuthStore((state) => state.login)
+  const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [errorMessage, setErrorMessage] = useState('')
+  const [isLoading, setIsLoading] = useState(false)
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: { preventDefault: () => void }) => {
     event.preventDefault()
-    const savedSignup = getSignupSnapshot()
+    setIsLoading(true)
+    setErrorMessage('')
 
-    if (!savedSignup) {
-      setErrorMessage('회원가입 후 로그인해주세요.')
-      return
-    }
-
-    if (email.trim() !== savedSignup.email || password !== savedSignup.password) {
+    try {
+      await login(email, password)
+      navigate('/workspaces/manage')
+    } catch {
       setErrorMessage('이메일 또는 비밀번호가 일치하지 않습니다.')
-      return
+    } finally {
+      setIsLoading(false)
     }
-
-    localStorage.setItem(
-      'chattr-auth-session',
-      JSON.stringify({
-        accessToken: 'mock-access-token',
-        email: savedSignup.email,
-        nickname: savedSignup.nickname,
-      }),
-    )
-    updateCurrentUserProfile({
-      email: savedSignup.email,
-      name: savedSignup.nickname,
-    })
-    navigate('/workspaces/manage')
   }
 
   return (
@@ -86,7 +54,9 @@ export function LoginPage() {
               <article className="rounded-lg border border-slate-300 bg-white p-5">
                 <Gauge aria-hidden className="text-[#0058BE]" size={20} strokeWidth={2.2} />
                 <h2 className="mt-3 text-base font-bold text-slate-950">실시간 동기화</h2>
-                <p className="mt-2 text-sm leading-5 text-slate-700">모든 기기에서 즉각적인 메시지 업데이트.</p>
+                <p className="mt-2 text-sm leading-5 text-slate-700">
+                  모든 기기에서 즉각적인 메시지 업데이트.
+                </p>
               </article>
 
               <article className="rounded-lg border border-slate-300 bg-white p-5">
@@ -105,7 +75,9 @@ export function LoginPage() {
           >
             <div className="text-center">
               <h2 className="text-2xl font-extrabold text-slate-950">반가워요!</h2>
-              <p className="mt-2 text-sm font-medium text-slate-700">계정에 로그인하여 대화를 시작하세요.</p>
+              <p className="mt-2 text-sm font-medium text-slate-700">
+                계정에 로그인하여 대화를 시작하세요.
+              </p>
             </div>
 
             <div className="mt-7 flex flex-col gap-3">
@@ -149,9 +121,10 @@ export function LoginPage() {
 
             <Button
               className="mt-6 min-h-10 w-full border-[#0058BE] bg-[#0058BE] text-base hover:bg-[#004EA8] focus-visible:ring-[#0058BE]"
+              disabled={isLoading}
               type="submit"
             >
-              로그인
+              {isLoading ? '로그인 중...' : '로그인'}
             </Button>
 
             <div className="my-6 h-px bg-slate-200" />
@@ -180,9 +153,9 @@ export function LoginPage() {
 
             <p className="mt-7 text-center text-sm font-medium text-slate-700">
               계정이 없으신가요?{' '}
-              <a className="font-semibold text-[#0058BE] hover:text-[#004EA8]" href="/signup">
+              <Link className="font-semibold text-[#0058BE] hover:text-[#004EA8]" to="/signup">
                 회원가입
-              </a>
+              </Link>
             </p>
           </form>
         </div>

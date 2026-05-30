@@ -1,18 +1,18 @@
 import { useEffect, useRef, useState } from 'react'
 import { Trash2 } from 'lucide-react'
+import { fileApi } from '../api/fileApi'
+import { messageApi } from '../api/messageApi'
 import { ChatInput } from '../components/chat/ChatInput'
 import { Avatar } from '../components/common/Avatar'
 import { DmMessage } from '../components/dm/DmMessage'
 import { DmSidebar } from '../components/layout/DmSidebar'
 import { MainLayout } from '../components/layout/MainLayout'
-import { createDefaultDmMessages } from '../mocks/mockDmMessages'
-import { currentUserId } from '../mocks/mockWorkspaceMembers'
+import { useAuthStore } from '../stores/useAuthStore'
 import { useDmStore } from '../stores/useDmStore'
 import { useMessageStore } from '../stores/useMessageStore'
-import { useWorkspaceStore } from '../stores/useWorkspaceStore'
 import type { Message } from '../types/message'
 import type { User } from '../types/user'
-import { currentUserName } from '../utils/userDisplay'
+import { dmSocket } from '../websocket/dmSocket'
 
 function DmHeader({ onDelete, participant }: { onDelete: () => void; participant?: User }) {
   return (
@@ -62,27 +62,17 @@ function DmMessageList({
 
   useEffect(() => {
     if (showReadBoundary) {
-      readBoundaryRef.current?.scrollIntoView({
-        behavior: 'smooth',
-        block: 'center',
-      })
+      readBoundaryRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
       return
     }
-
-    scrollRef.current?.scrollTo({
-      top: scrollRef.current.scrollHeight,
-      behavior: 'smooth',
-    })
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
   }, [lastMessageId, showReadBoundary])
 
   const handleScroll = () => {
     const scrollElement = scrollRef.current
     if (!scrollElement || !showReadBoundary) return
-
     const isAtBottom = scrollElement.scrollTop + scrollElement.clientHeight >= scrollElement.scrollHeight - 8
-    if (isAtBottom) {
-      onReadToBottom?.()
-    }
+    if (isAtBottom) onReadToBottom?.()
   }
 
   return (
@@ -119,67 +109,55 @@ function DmMessageList({
 
 export function DmPage() {
   const { activeRoomId, clearOpenedUnreadCount, deleteRoom, openedUnreadCounts, rooms } = useDmStore()
-  const currentUser = useWorkspaceStore((state) =>
-    state.workspaceMembers.find((member) => member.user.id === currentUserId)?.user,
-  )
+  const authUser = useAuthStore((state) => state.user)
+  const activeUserId = authUser?.id ?? ''
   const { deleteDmMessages, dmMessagesByRoomId, updateDmMessages } = useMessageStore()
   const [replyTarget, setReplyTarget] = useState<Message | null>(null)
+
   const activeRoom = rooms.find((room) => room.id === activeRoomId) ?? rooms[0]
-  const participant = activeRoom?.participants[0]
+  const participant = activeRoom?.participants.find((p) => p.id !== activeUserId) ?? activeRoom?.participants[0]
   const activeRoomIdValue = activeRoom?.id
-  const currentAuthor = currentUser ?? {
-    id: currentUserId,
-    email: 'kim.chattr@example.com',
-    name: currentUserName,
-    status: 'online' as const,
-  }
-  const messages = activeRoom
-    ? (dmMessagesByRoomId[activeRoom.id] ?? createDefaultDmMessages()).map((message) =>
-        message.author.id === currentUserId
-          ? {
-              ...message,
-              author: currentAuthor,
-            }
-          : message,
-      )
-    : []
+  const messages = activeRoomIdValue ? (dmMessagesByRoomId[activeRoomIdValue] ?? []) : []
 
   const updateActiveMessages = (updater: (messages: Message[]) => Message[]) => {
     if (!activeRoomIdValue) return
+    updateDmMessages(activeRoomIdValue, updater)
+  }
 
-    updateDmMessages(activeRoomIdValue, (current) =>
-      updater(current.length > 0 ? current : createDefaultDmMessages()),
+  const handleSendMessage = async (content: string, file?: File) => {
+    if (!activeRoomIdValue) return
+
+    let attachments: { url: string; name: string; size: number; contentType: string }[] | undefined
+
+    if (file) {
+      const { presignedUrl, fileUrl } = await fileApi.getPresignedUrl(file.name, file.type)
+      await fileApi.uploadToS3(presignedUrl, file)
+      attachments = [{ url: fileUrl, name: file.name, size: file.size, contentType: file.type }]
+    }
+
+    dmSocket.sendMessage(activeRoomIdValue, content, {
+      parentMessageId: replyTarget?.id,
+      attachments,
+    })
+    setReplyTarget(null)
+  }
+
+  const handleDeleteMessage = (messageId: string) => {
+    void messageApi.deleteMessage(messageId).then(() =>
+      updateActiveMessages((current) => current.filter((message) => message.id !== messageId)),
     )
   }
 
-  const handleSendMessage = (content: string) => {
-    if (!activeRoomIdValue) return
-
-    const now = new Date()
-    const nextMessage: Message = {
-      id: `${activeRoomIdValue}-message-${now.getTime()}`,
-      roomId: activeRoomIdValue,
-      type: 'text',
-      content,
-      createdAt: now.toISOString(),
-      displayTime: '방금 전',
-      parentMessageId: replyTarget?.id,
-      replyPreview: replyTarget
-        ? {
-            authorName: replyTarget.author.name,
-            content: replyTarget.content,
-          }
-        : undefined,
-      author: currentAuthor,
-    }
-
-    updateActiveMessages((current) => [...current, nextMessage])
-    setReplyTarget(null)
+  const handleEditMessage = (messageId: string, content: string) => {
+    void messageApi.editMessage(messageId, content).then((updated) =>
+      updateActiveMessages((current) =>
+        current.map((message) => (message.id === messageId ? updated : message)),
+      ),
+    )
   }
 
   const handleDeleteRoom = () => {
     if (!activeRoomIdValue) return
-
     deleteDmMessages(activeRoomIdValue)
     deleteRoom(activeRoomIdValue)
     setReplyTarget(null)
@@ -189,20 +167,10 @@ export function DmPage() {
     <MainLayout header={<DmHeader onDelete={handleDeleteRoom} participant={participant} />} sidebar={<DmSidebar />}>
       <DmMessageList
         messages={messages}
-        onDeleteMessage={(messageId) =>
-          updateActiveMessages((current) => current.filter((message) => message.id !== messageId))
-        }
-        onEditMessage={(messageId, content) =>
-          updateActiveMessages((current) =>
-            current.map((message) =>
-              message.id === messageId ? { ...message, content, updatedAt: new Date().toISOString() } : message,
-            ),
-          )
-        }
+        onDeleteMessage={handleDeleteMessage}
+        onEditMessage={handleEditMessage}
         onReadToBottom={() => {
-          if (activeRoomIdValue) {
-            clearOpenedUnreadCount(activeRoomIdValue)
-          }
+          if (activeRoomIdValue) clearOpenedUnreadCount(activeRoomIdValue)
         }}
         onReplyMessage={setReplyTarget}
         unreadCount={activeRoomIdValue ? openedUnreadCounts[activeRoomIdValue] : 0}
@@ -211,7 +179,7 @@ export function DmPage() {
         compact
         helperText="Enter를 눌러 메시지 전송, Shift + Enter로 줄바꿈"
         onCancelReply={() => setReplyTarget(null)}
-        onSend={handleSendMessage}
+        onSend={(content, file) => { void handleSendMessage(content, file) }}
         replyTarget={replyTarget}
       />
     </MainLayout>

@@ -1,8 +1,7 @@
-import type { SocketEventMap, SocketEventName } from '../types/socket'
-
-export type SocketListener<T extends SocketEventName> = (payload: SocketEventMap[T]) => void
-
-export interface SocketClientOptions {
-  url: string
-  token?: string
+export interface MessageSendRequest {
+  roomId: string
+  roomType: 'CHANNEL' | 'DM'
+  content: string
+  parentMessageId?: string
+  attachments?: { url: string; name: string; size: number; contentType: string }[]
 }

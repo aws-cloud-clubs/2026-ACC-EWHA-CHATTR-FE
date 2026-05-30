@@ -1,12 +1,23 @@
 import { axiosInstance } from './axiosInstance'
-import type { FileAttachment } from '../types/message'
+
+interface PresignResponse {
+  presignedUrl: string
+  fileUrl: string
+}
 
 export const fileApi = {
-  upload: async (file: File) => {
-    const formData = new FormData()
-    formData.append('file', file)
-
-    const { data } = await axiosInstance.post<FileAttachment>('/files', formData)
+  getPresignedUrl: async (filename: string, contentType: string) => {
+    const { data } = await axiosInstance.post<PresignResponse>('/files/presign', {
+      filename,
+      contentType,
+    })
     return data
+  },
+  uploadToS3: async (presignedUrl: string, file: File) => {
+    await fetch(presignedUrl, {
+      method: 'PUT',
+      body: file,
+      headers: { 'Content-Type': file.type },
+    })
   },
 }

@@ -1,7 +1,12 @@
 import type { Message } from '../types/message'
 import { socketClient } from './socketClient'
+import type { MessageSendRequest } from './socketTypes'
+
+type SendOptions = Pick<MessageSendRequest, 'parentMessageId' | 'attachments'>
 
 export const dmSocket = {
-  sendMessage: (message: Message) => socketClient.send('message:new', message),
-  onMessage: (listener: (message: Message) => void) => socketClient.on('message:new', listener),
+  sendMessage: (roomId: string, content: string, options?: SendOptions) =>
+    socketClient.send({ roomId, roomType: 'DM', content, ...options }),
+  subscribe: (roomId: string, callback: (message: Message) => void) =>
+    socketClient.subscribe(roomId, callback),
 }

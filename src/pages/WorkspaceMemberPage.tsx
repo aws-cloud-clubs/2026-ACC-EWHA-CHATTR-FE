@@ -1,8 +1,9 @@
 import { useState, type MouseEvent } from 'react'
 import { AlertCircle, MessageSquare, UsersRound, X } from 'lucide-react'
+import { workspaceApi } from '../api/workspaceApi'
 import { MainLayout } from '../components/layout/MainLayout'
 import { WorkspaceMemberItem } from '../components/workspace/WorkspaceMemberItem'
-import { currentUserId } from '../mocks/mockWorkspaceMembers'
+import { useAuthStore } from '../stores/useAuthStore'
 import { useWorkspaceStore } from '../stores/useWorkspaceStore'
 import type { WorkspaceMember } from '../types/workspace'
 import { getWorkspaceAccent } from '../utils/workspaceAccent'
@@ -12,27 +13,6 @@ interface PermissionErrorState {
   left: number
   top: number
 }
-
-const workspaceMemberViewMeta = {
-  apollo: {
-    accent: '#0058BE',
-    badge: 'apollo',
-    memberCount: 68,
-    name: '프로젝트 apollo TF',
-  },
-  '0602': {
-    accent: '#5a6072',
-    badge: '0602',
-    memberCount: 14,
-    name: '0602 meeting 준비',
-  },
-  pj5: {
-    accent: '#8A3D00',
-    badge: 'PJ5',
-    memberCount: 31,
-    name: 'project5',
-  },
-} as const
 
 function WorkspaceMemberHeader() {
   return (
@@ -47,37 +27,27 @@ function WorkspaceMemberHeader() {
 
 export function WorkspaceMemberPage() {
   const [permissionError, setPermissionError] = useState<PermissionErrorState | null>(null)
-  const { activeWorkspaceId = 'apollo', updateWorkspaceMemberRole, workspaceMembers } = useWorkspaceStore()
+  const authUser = useAuthStore((state) => state.user)
+  const activeUserId = authUser?.id ?? ''
+  const { activeWorkspaceId, updateWorkspaceMemberRole, workspaceMembers } = useWorkspaceStore()
   const activeWorkspaceMembers = useWorkspaceStore(
-    (state) => state.workspaceMembersByWorkspaceId[activeWorkspaceId] ?? workspaceMembers,
+    (state) => (activeWorkspaceId ? (state.workspaceMembersByWorkspaceId[activeWorkspaceId] ?? workspaceMembers) : workspaceMembers),
   )
   const activeWorkspace = useWorkspaceStore((state) =>
     state.workspaces.find((workspace) => workspace.id === activeWorkspaceId),
   )
   const activeWorkspaceIndex = useWorkspaceStore((state) =>
-    Math.max(
-      0,
-      state.workspaces.findIndex((workspace) => workspace.id === activeWorkspaceId),
-    ),
+    Math.max(0, state.workspaces.findIndex((workspace) => workspace.id === activeWorkspaceId)),
   )
-  const workspaceMeta = workspaceMemberViewMeta[activeWorkspaceId as keyof typeof workspaceMemberViewMeta] ?? {
-    accent: '#0058BE',
-    badge: activeWorkspace?.name.slice(0, 2) ?? 'ws',
-    memberCount: Math.max(1, activeWorkspaceMembers.length),
-    name: activeWorkspace?.name ?? '워크스페이스',
-  }
   const workspaceAccent = getWorkspaceAccent(activeWorkspaceIndex)
-  const displayedMembers = activeWorkspaceMembers
   const displayedMemberCount = activeWorkspaceMembers.length
   const currentWorkspaceRole =
-    activeWorkspaceMembers.find((member) => member.user.id === currentUserId)?.role ?? 'member'
+    activeWorkspaceMembers.find((member) => member.user.id === activeUserId)?.role ?? 'member'
 
   const handleRoleClick = (member: WorkspaceMember, event: MouseEvent<HTMLButtonElement>) => {
     const buttonRect = event.currentTarget.getBoundingClientRect()
-    const popupWidth = 352
-    const popupHeight = 132
-    const left = Math.max(16, Math.min(buttonRect.right + 10, window.innerWidth - popupWidth - 16))
-    const top = Math.max(16, Math.min(buttonRect.top - 8, window.innerHeight - popupHeight - 16))
+    const left = Math.max(16, Math.min(buttonRect.right + 10, window.innerWidth - 368))
+    const top = Math.max(16, Math.min(buttonRect.top - 8, window.innerHeight - 148))
 
     if (currentWorkspaceRole !== 'admin') {
       setPermissionError({
@@ -88,8 +58,13 @@ export function WorkspaceMemberPage() {
       return
     }
 
+    if (!activeWorkspaceId) return
+
     setPermissionError(null)
-    updateWorkspaceMemberRole(member.id, member.role === 'admin' ? 'member' : 'admin')
+    const newRole = member.role === 'admin' ? 'member' : 'admin'
+    void workspaceApi.changeMemberRole(activeWorkspaceId, member.id, newRole).then(() => {
+      updateWorkspaceMemberRole(member.id, newRole)
+    })
   }
 
   return (
@@ -140,18 +115,18 @@ export function WorkspaceMemberPage() {
                 <header className="flex items-center justify-between border-b border-slate-300 pb-4">
                   <div className="flex items-center gap-4">
                     <span className="grid size-10 place-items-center rounded-md bg-slate-200 text-xs font-extrabold text-slate-950">
-                      {workspaceMeta.badge}
+                      {activeWorkspace?.name.slice(0, 2).toUpperCase() ?? 'WS'}
                     </span>
-                    <h2 className="text-sm font-extrabold text-slate-950">{workspaceMeta.name}</h2>
+                    <h2 className="text-sm font-extrabold text-slate-950">{activeWorkspace?.name ?? '워크스페이스'}</h2>
                   </div>
                   <span className="text-xs font-medium text-slate-700">{displayedMemberCount} Members</span>
                 </header>
 
                 <div className="mt-2 max-h-[34rem] overflow-y-auto pr-1">
-                  {displayedMembers.map((member) => (
+                  {activeWorkspaceMembers.map((member) => (
                     <WorkspaceMemberItem
                       key={member.id}
-                      isCurrentUser={member.user.id === currentUserId}
+                      isCurrentUser={member.user.id === activeUserId}
                       member={member}
                       onRoleClick={handleRoleClick}
                     />

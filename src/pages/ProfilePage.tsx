@@ -1,38 +1,13 @@
 import { Camera, Laptop, MessageSquare, Monitor, ShieldCheck, Smartphone, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
+import { userApi } from '../api/userApi'
 import { Avatar } from '../components/common/Avatar'
 import { Button } from '../components/common/Button'
 import { Input } from '../components/common/Input'
 import { MainLayout } from '../components/layout/MainLayout'
-import { currentUserId } from '../mocks/mockWorkspaceMembers'
+import { useAuthStore } from '../stores/useAuthStore'
 import { useWorkspaceStore } from '../stores/useWorkspaceStore'
 import type { Device } from '../types/user'
-import { currentUserName } from '../utils/userDisplay'
-
-const devices: Array<Device & { location: string; current?: boolean; icon: 'laptop' | 'phone' | 'desktop' }> = [
-  {
-    id: 'device-1',
-    name: 'MacBook Pro 14"',
-    location: 'Seoul, South Korea - 127.0.0.1',
-    lastActiveAt: '2026-05-28T09:00:00.000Z',
-    current: true,
-    icon: 'laptop',
-  },
-  {
-    id: 'device-2',
-    name: 'iPhone 15 Pro',
-    location: 'Busan, South Korea - 2시간 전 활동',
-    lastActiveAt: '2026-05-28T07:00:00.000Z',
-    icon: 'phone',
-  },
-  {
-    id: 'device-3',
-    name: 'Windows Workstation',
-    location: 'Seoul, South Korea - 3일 전 활동',
-    lastActiveAt: '2026-05-25T09:00:00.000Z',
-    icon: 'desktop',
-  },
-]
 
 function ProfileTopHeader() {
   return (
@@ -47,7 +22,6 @@ function ProfileTopHeader() {
 
 function DeviceIcon({ type }: { type: 'laptop' | 'phone' | 'desktop' }) {
   const Icon = type === 'phone' ? Smartphone : type === 'desktop' ? Monitor : Laptop
-
   return (
     <span className="grid size-9 shrink-0 place-items-center rounded-full bg-slate-100 text-slate-600">
       <Icon size={19} />
@@ -56,16 +30,12 @@ function DeviceIcon({ type }: { type: 'laptop' | 'phone' | 'desktop' }) {
 }
 
 export function ProfilePage() {
-  const { updateCurrentUserProfile, workspaceMembers } = useWorkspaceStore()
+  const { updateCurrentUserProfile } = useWorkspaceStore()
+  const authUser = useAuthStore((state) => state.user)
+  const setUser = useAuthStore((state) => state.setUser)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
-  const currentMember = workspaceMembers.find((member) => member.user.id === currentUserId)
-  const currentUser = currentMember?.user ?? {
-    id: currentUserId,
-    email: 'kim.chattr@example.com',
-    name: currentUserName,
-    status: 'online' as const,
-  }
+  const currentUser = authUser ?? { id: '', email: '', name: '', status: 'online' as const }
   const [nickname, setNickname] = useState(currentUser.name)
   const [email, setEmail] = useState(currentUser.email)
   const [avatarUrl, setAvatarUrl] = useState(currentUser.avatarUrl)
@@ -73,6 +43,7 @@ export function ProfilePage() {
   const [cameraOpen, setCameraOpen] = useState(false)
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null)
   const [cameraError, setCameraError] = useState('')
+  const [devices, setDevices] = useState<Device[]>([])
 
   useEffect(() => {
     if (videoRef.current && cameraStream) {
@@ -80,12 +51,20 @@ export function ProfilePage() {
     }
   }, [cameraStream])
 
+  useEffect(() => {
+    userApi.getDevices().then(setDevices).catch(() => {})
+  }, [])
+
   const saveAvatarUrl = (nextAvatarUrl: string) => {
     setAvatarUrl(nextAvatarUrl)
-    updateCurrentUserProfile({
-      avatarUrl: nextAvatarUrl,
-      email: email.trim() || currentUser.email,
-      name: nickname.trim() || currentUser.name,
+    void userApi.updateProfile({ avatarUrl: nextAvatarUrl }).then((updated) => {
+      setUser({ ...currentUser, ...updated })
+      updateCurrentUserProfile({
+        avatarUrl: nextAvatarUrl,
+        email: currentUser.email,
+        name: currentUser.name,
+        userId: currentUser.id,
+      })
     })
   }
 
@@ -95,26 +74,20 @@ export function ProfilePage() {
     const context = canvas.getContext('2d')
     canvas.width = size
     canvas.height = size
-
     if (!context) return ''
-
     const sourceSize = Math.min(width, height)
     const sourceX = (width - sourceSize) / 2
     const sourceY = (height - sourceSize) / 2
-
     context.drawImage(source, sourceX, sourceY, sourceSize, sourceSize, 0, 0, size, size)
     return canvas.toDataURL('image/jpeg', 0.82)
   }
 
   const handleProfileImageChange = (file?: File) => {
     if (!file || !file.type.startsWith('image/')) return
-
     const image = new Image()
     image.onload = () => {
       const nextAvatarUrl = resizeImageToAvatar(image, image.naturalWidth, image.naturalHeight)
-      if (nextAvatarUrl) {
-        saveAvatarUrl(nextAvatarUrl)
-      }
+      if (nextAvatarUrl) saveAvatarUrl(nextAvatarUrl)
       URL.revokeObjectURL(image.src)
       setAvatarMenuOpen(false)
     }
@@ -130,13 +103,8 @@ export function ProfilePage() {
   const openCamera = async () => {
     setAvatarMenuOpen(false)
     setCameraError('')
-
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: false,
-        video: { facingMode: 'user' },
-      })
-
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: 'user' } })
       setCameraStream(stream)
       setCameraOpen(true)
     } catch {
@@ -148,24 +116,24 @@ export function ProfilePage() {
   const captureProfileImage = () => {
     const video = videoRef.current
     if (!video) return
-
     const nextAvatarUrl = resizeImageToAvatar(video, video.videoWidth, video.videoHeight)
-    if (nextAvatarUrl) {
-      saveAvatarUrl(nextAvatarUrl)
-    }
+    if (nextAvatarUrl) saveAvatarUrl(nextAvatarUrl)
     closeCamera()
   }
 
   const handleSave = () => {
     const nextName = nickname.trim()
     const nextEmail = email.trim()
-
     if (!nextName || !nextEmail) return
 
-    updateCurrentUserProfile({
-      avatarUrl,
-      email: nextEmail,
-      name: nextName,
+    void userApi.updateProfile({ name: nextName, avatarUrl }).then((updated) => {
+      setUser({ ...currentUser, ...updated })
+      updateCurrentUserProfile({
+        avatarUrl,
+        email: nextEmail,
+        name: nextName,
+        userId: currentUser.id,
+      })
     })
   }
 
@@ -291,24 +259,13 @@ export function ProfilePage() {
                 </header>
                 <div className="p-4">
                   {cameraStream ? (
-                    <video
-                      autoPlay
-                      className="aspect-video w-full rounded-lg bg-slate-950 object-cover"
-                      muted
-                      playsInline
-                      ref={videoRef}
-                    />
+                    <video autoPlay className="aspect-video w-full rounded-lg bg-slate-950 object-cover" muted playsInline ref={videoRef} />
                   ) : (
                     <div className="grid aspect-video w-full place-items-center rounded-lg bg-slate-100 px-6 text-center text-xs font-bold leading-5 text-slate-500">
                       {cameraError || '카메라를 준비하는 중입니다.'}
                     </div>
                   )}
-                  <Button
-                    className="mt-4 min-h-9 w-full text-sm"
-                    disabled={!cameraStream}
-                    onClick={captureProfileImage}
-                    type="button"
-                  >
+                  <Button className="mt-4 min-h-9 w-full text-sm" disabled={!cameraStream} onClick={captureProfileImage} type="button">
                     촬영하기
                   </Button>
                 </div>
@@ -334,7 +291,7 @@ export function ProfilePage() {
             <div className="mb-4">
               <h2 className="text-base font-extrabold text-slate-950">로그인 기기 관리</h2>
               <p className="mt-1 text-sm font-medium text-slate-700">
-                현재 계정에 로그인된 기기 목록입니다. 최대 3개까지 등록 가능합니다.
+                현재 계정에 로그인된 기기 목록입니다.
               </p>
             </div>
 
@@ -345,29 +302,20 @@ export function ProfilePage() {
                   key={device.id}
                 >
                   <div className="flex min-w-0 items-center gap-4">
-                    <DeviceIcon type={device.icon} />
+                    <DeviceIcon type="laptop" />
                     <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <h3 className="truncate text-sm font-medium text-slate-950">{device.name}</h3>
-                        {device.current ? (
-                          <span className="rounded-full bg-orange-100 px-2 py-0.5 text-[10px] font-bold text-orange-700">
-                            현재 기기
-                          </span>
-                        ) : null}
-                      </div>
-                      <p className="mt-1 text-sm font-medium text-slate-500">{device.location}</p>
+                      <h3 className="truncate text-sm font-medium text-slate-950">{device.name}</h3>
+                      <p className="mt-1 text-sm font-medium text-slate-500">{device.lastActiveAt}</p>
                     </div>
                   </div>
-                  <button
-                    className={`shrink-0 text-sm font-bold ${
-                      device.current ? 'text-slate-700' : 'text-[#BA1A1A]'
-                    }`}
-                    type="button"
-                  >
-                    {device.current ? '로그인 중' : '로그아웃'}
+                  <button className="shrink-0 text-sm font-bold text-[#BA1A1A]" type="button">
+                    로그아웃
                   </button>
                 </article>
               ))}
+              {devices.length === 0 ? (
+                <p className="text-sm font-medium text-slate-500">등록된 기기가 없습니다.</p>
+              ) : null}
             </div>
           </section>
         </div>

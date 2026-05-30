@@ -1,7 +1,8 @@
+import { isAxiosError } from 'axios'
 import { CheckCircle2, MessageSquare } from 'lucide-react'
 import { useMemo, useState } from 'react'
-import type { FormEvent } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
+import { authApi } from '../api/authApi'
 import { Button } from '../components/common/Button'
 import { Input } from '../components/common/Input'
 
@@ -35,6 +36,8 @@ export function SignupPage() {
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [submitted, setSubmitted] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
+  const [errorMessage, setErrorMessage] = useState('')
 
   const passwordChecks = useMemo(
     () => PASSWORD_RULES.map((rule) => ({ ...rule, passed: rule.test(password) })),
@@ -45,31 +48,35 @@ export function SignupPage() {
   const isPasswordMatched = password.length > 0 && password === confirmPassword
   const canSubmit = nickname.trim().length >= 2 && isEmailValid && isPasswordValid && isPasswordMatched
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: { preventDefault: () => void }) => {
     event.preventDefault()
     setSubmitted(true)
+    setErrorMessage('')
 
     if (!canSubmit) return
 
-    // Cognito/API 연동 전 UI 단계에서는 가입 입력값을 임시 저장해 로그인 화면 복귀 흐름만 확인합니다.
-    localStorage.setItem(
-      'chattr-last-signup',
-      JSON.stringify({
-        email,
-        nickname,
-        password,
-      }),
-    )
-    navigate('/login')
+    setIsLoading(true)
+    try {
+      await authApi.signup({ email: email.trim(), password, nickname: nickname.trim() })
+      navigate('/login')
+    } catch (error) {
+      if (isAxiosError(error) && error.response?.status === 409) {
+        setErrorMessage('이미 가입된 이메일입니다.')
+      } else {
+        setErrorMessage('회원가입 중 오류가 발생했습니다. 다시 시도해주세요.')
+      }
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   return (
     <main className="flex min-h-screen flex-col bg-slate-50 text-slate-950">
       <header className="flex h-12 shrink-0 items-center px-5">
-        <a className="flex items-center gap-2 text-[#0058BE]" href="/login">
+        <Link className="flex items-center gap-2 text-[#0058BE]" to="/login">
           <MessageSquare aria-hidden size={24} strokeWidth={2.5} />
           <span className="text-base font-bold">Chattr</span>
-        </a>
+        </Link>
       </header>
 
       <section className="relative flex min-h-0 flex-1 items-center justify-center overflow-auto px-6 py-8">
@@ -78,14 +85,13 @@ export function SignupPage() {
           <div className="max-w-lg">
             <p className="text-sm font-bold uppercase tracking-wide text-[#0058BE]">Create account</p>
             <h1 className="mt-4 text-3xl font-extrabold leading-tight text-slate-950">
-              Chattr에서 팀 협업을 시작하세요.
+              Chattr에서 새 협업을 시작하세요.
             </h1>
             <p className="mt-5 text-sm font-medium leading-6 text-slate-700">
-              회원가입은 Cognito 기반 인증 흐름을 전제로 구성되어 있습니다. 비밀번호는 서비스 DB에 저장하지
-              않고, 가입 완료 후 로그인 화면에서 인증을 진행합니다.
+              AWS Cognito 기반 인증으로 안전하게 계정을 생성하고, 팀원들과 실시간으로 소통하세요.
             </p>
             <div className="mt-8 rounded-lg border border-slate-300 bg-white p-5">
-              <h2 className="text-sm font-extrabold text-slate-950">가입 후 처리 흐름</h2>
+              <h2 className="text-sm font-extrabold text-slate-950">가입 처리 흐름</h2>
               <ul className="mt-3 space-y-2 text-sm font-medium leading-5 text-slate-700">
                 <li>1. Cognito User Pool에 사용자 등록</li>
                 <li>2. 서비스 DB에는 cognito_sub 기반 사용자 정보 저장</li>
@@ -106,7 +112,10 @@ export function SignupPage() {
                 <Input
                   id="nickname"
                   label="닉네임"
-                  onChange={(event) => setNickname(event.currentTarget.value)}
+                  onChange={(event) => {
+                    setNickname(event.currentTarget.value)
+                    setErrorMessage('')
+                  }}
                   placeholder="예: 김채트"
                   value={nickname}
                 />
@@ -120,7 +129,10 @@ export function SignupPage() {
                 <Input
                   id="signup-email"
                   label="이메일"
-                  onChange={(event) => setEmail(event.currentTarget.value)}
+                  onChange={(event) => {
+                    setEmail(event.currentTarget.value)
+                    setErrorMessage('')
+                  }}
                   placeholder="name@company.com"
                   type="email"
                   value={email}
@@ -169,15 +181,21 @@ export function SignupPage() {
               </div>
             </div>
 
-            <Button className="mt-7 w-full" disabled={submitted && !canSubmit} type="submit">
-              회원가입 완료
+            {errorMessage ? <p className="mt-4 text-sm font-semibold text-[#BA1A1A]">{errorMessage}</p> : null}
+
+            <Button
+              className="mt-7 w-full"
+              disabled={isLoading || (submitted && !canSubmit)}
+              type="submit"
+            >
+              {isLoading ? '처리 중...' : '회원가입 완료'}
             </Button>
 
             <p className="mt-5 text-center text-sm font-medium text-slate-700">
               이미 계정이 있으신가요?{' '}
-              <a className="font-semibold text-[#0058BE] hover:text-[#004EA8]" href="/login">
+              <Link className="font-semibold text-[#0058BE] hover:text-[#004EA8]" to="/login">
                 로그인
-              </a>
+              </Link>
             </p>
           </form>
         </div>

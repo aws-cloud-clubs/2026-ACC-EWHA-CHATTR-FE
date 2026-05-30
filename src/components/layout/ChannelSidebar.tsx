@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { currentUserId } from '../../mocks/mockWorkspaceMembers'
+﻿import { useState } from 'react'
+import { useAuthStore } from '../../stores/useAuthStore'
 import { useChannelStore } from '../../stores/useChannelStore'
 import { useWorkspaceStore } from '../../stores/useWorkspaceStore'
 import type { WorkspaceMember } from '../../types/workspace'
@@ -13,10 +13,12 @@ const CHANNEL_EXPANDED_STORAGE_KEY = 'chattr-channel-sidebar-expanded'
 const getInitialChannelExpanded = () => localStorage.getItem(CHANNEL_EXPANDED_STORAGE_KEY) !== 'false'
 
 function CreateChannelModal({
+  currentUserId,
   members,
   onClose,
   onCreate,
 }: {
+  currentUserId: string
   members: WorkspaceMember[]
   onClose: () => void
   onCreate: (channelName: string, memberIds: string[]) => void
@@ -220,8 +222,10 @@ export function ChannelSidebar() {
   const [createModalOpen, setCreateModalOpen] = useState(false)
   const [memberModalOpen, setMemberModalOpen] = useState(false)
   const [addedMemberIds, setAddedMemberIds] = useState<string[]>([])
+  const authUser = useAuthStore((state) => state.user)
+  const activeUserId = authUser?.id ?? ''
   const { activeChannelId, addChannel, channels, markChannelOpened, unreadCounts } = useChannelStore()
-  const { activeWorkspaceId = 'apollo', addWorkspaceMember, workspaceMembers } = useWorkspaceStore()
+  const { activeWorkspaceId, addWorkspaceMember, workspaceMembers } = useWorkspaceStore()
   const activeWorkspace = useWorkspaceStore((state) =>
     state.workspaces.find((workspace) => workspace.id === activeWorkspaceId),
   )
@@ -248,6 +252,16 @@ export function ChannelSidebar() {
     return member
   }
 
+  const openMemberModal = () => {
+    setAddedMemberIds([])
+    setMemberModalOpen(true)
+  }
+
+  const closeMemberModal = () => {
+    setMemberModalOpen(false)
+    setAddedMemberIds([])
+  }
+
   const handleSelectChannel = (channelId: string) => {
     markChannelOpened(channelId)
   }
@@ -266,6 +280,7 @@ export function ChannelSidebar() {
     <aside className="h-screen min-w-60 overflow-hidden border-r border-slate-300 bg-[#f1f3fb] max-md:hidden">
       {createModalOpen ? (
         <CreateChannelModal
+          currentUserId={activeUserId}
           members={workspaceMembers}
           onClose={() => setCreateModalOpen(false)}
           onCreate={handleCreateChannel}
@@ -275,7 +290,7 @@ export function ChannelSidebar() {
         <AddWorkspaceMemberModal
           members={addedMembers}
           onAdd={handleAddWorkspaceMember}
-          onClose={() => setMemberModalOpen(false)}
+          onClose={closeMemberModal}
         />
       ) : null}
 
@@ -287,7 +302,7 @@ export function ChannelSidebar() {
           className="text-slate-700 hover:text-[#0058BE]"
           type="button"
           aria-label="워크스페이스 멤버 추가"
-          onClick={() => setMemberModalOpen(true)}
+          onClick={openMemberModal}
         >
           <UserPlus size={18} />
         </button>

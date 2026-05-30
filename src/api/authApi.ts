@@ -1,16 +1,28 @@
 import { axiosInstance } from './axiosInstance'
 import type { AuthResponse, LoginRequest } from '../types/auth'
 
+export interface SignupRequest {
+  email: string
+  password: string
+  nickname: string
+}
+
 export const authApi = {
   login: async (payload: LoginRequest) => {
     const { data } = await axiosInstance.post<AuthResponse>('/auth/login', payload)
     return data
   },
+  signup: async (payload: SignupRequest) => {
+    await axiosInstance.post('/auth/signup', payload)
+  },
   logout: async () => {
     await axiosInstance.post('/auth/logout')
   },
-  me: async () => {
-    const { data } = await axiosInstance.get<AuthResponse>('/auth/me')
+  registerDevice: async (deviceToken: string) => {
+    await axiosInstance.post('/auth/device/register', { deviceToken })
+  },
+  getDevices: async () => {
+    const { data } = await axiosInstance.get('/auth/devices')
     return data
   },
 }

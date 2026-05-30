@@ -7,28 +7,26 @@ interface ChatInputProps {
   compact?: boolean
   helperText?: string
   onCancelReply?: () => void
-  onSend?: (content: string) => void
+  onSend?: (content: string, file?: File) => void
   replyTarget?: Message | null
 }
 
 export function ChatInput({ compact = false, helperText, onCancelReply, onSend, replyTarget }: ChatInputProps) {
   const [message, setMessage] = useState('')
-  const [hasAttachment, setHasAttachment] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const canSend = message.trim().length > 0 || hasAttachment
+  const selectedFile = fileInputRef.current?.files?.[0]
+  const canSend = message.trim().length > 0 || Boolean(selectedFile)
 
   const handleSubmit = () => {
     const content = message.trim()
-    if (!content && !hasAttachment) return
+    const file = fileInputRef.current?.files?.[0]
+    if (!content && !file) return
 
     setMessage('')
-    setHasAttachment(false)
-    if (fileInputRef.current) {
-      fileInputRef.current.value = ''
-    }
+    if (fileInputRef.current) fileInputRef.current.value = ''
 
     try {
-      onSend?.(content)
+      onSend?.(content, file)
     } catch (error) {
       console.error('Failed to send message', error)
     } finally {
@@ -78,9 +76,9 @@ export function ChatInput({ compact = false, helperText, onCancelReply, onSend, 
             <Plus size={22} />
             <input
               className="sr-only"
-              onChange={(event) => setHasAttachment((event.currentTarget.files?.length ?? 0) > 0)}
               ref={fileInputRef}
               type="file"
+              onChange={() => {}}
             />
           </label>
 
