@@ -8,6 +8,14 @@ export interface User {
   status: UserStatus
 }
 
+export interface BackendUser {
+  id: string
+  email: string
+  nickname: string
+  online: boolean
+  createdAt?: string
+}
+
 export interface Device {
   id: string
   name: string

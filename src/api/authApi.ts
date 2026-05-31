@@ -1,5 +1,5 @@
 import { axiosInstance } from './axiosInstance'
-import type { AuthResponse, LoginRequest } from '../types/auth'
+import type { LoginRequest, LoginResponse } from '../types/auth'
 
 export interface SignupRequest {
   email: string
@@ -9,7 +9,7 @@ export interface SignupRequest {
 
 export const authApi = {
   login: async (payload: LoginRequest) => {
-    const { data } = await axiosInstance.post<AuthResponse>('/auth/login', payload)
+    const { data } = await axiosInstance.post<LoginResponse>('/auth/login', payload)
     return data
   },
   signup: async (payload: SignupRequest) => {

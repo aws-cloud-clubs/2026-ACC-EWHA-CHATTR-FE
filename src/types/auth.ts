@@ -14,3 +14,11 @@ export interface AuthResponse {
   user: User
   tokens: AuthTokens
 }
+
+export interface LoginResponse {
+  idToken: string
+  accessToken: string
+  refreshToken: string
+  username: string
+  expiresIn: number
+}

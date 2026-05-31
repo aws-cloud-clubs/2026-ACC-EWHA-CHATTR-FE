@@ -210,7 +210,6 @@ export function ChatPage() {
   const { activeChannelId, channels, clearOpenedUnreadCount, openedUnreadCounts } = useChannelStore()
   const { channelMessagesByRoomId, updateChannelMessages } = useMessageStore()
   const { activeWorkspaceId } = useWorkspaceStore()
-  const authUser = useAuthStore((state) => state.user)
   const [replyTarget, setReplyTarget] = useState<Message | null>(null)
   const activeChannel = channels.find(
     (channel) => channel.id === activeChannelId && channel.workspaceId === activeWorkspaceId,

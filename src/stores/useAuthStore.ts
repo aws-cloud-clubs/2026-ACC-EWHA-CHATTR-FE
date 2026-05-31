@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { authApi } from '../api/authApi'
 import { userApi } from '../api/userApi'
-import { clearTokens, getAccessToken, setAccessToken, setRefreshToken } from '../utils/token'
+import { clearTokens, getIdToken, setAccessToken, setIdToken, setRefreshToken } from '../utils/token'
 import type { User } from '../types/user'
 import { useChannelStore } from './useChannelStore'
 import { useDmStore } from './useDmStore'
@@ -27,9 +27,11 @@ export const useAuthStore = create<AuthState>()(
       isSessionReady: false,
       setUser: (user) => set({ user, isAuthenticated: Boolean(user) }),
       login: async (email, password) => {
-        const { user, tokens } = await authApi.login({ email, password })
+        const tokens = await authApi.login({ email, password })
+        setIdToken(tokens.idToken)
         setAccessToken(tokens.accessToken)
         setRefreshToken(tokens.refreshToken)
+        const user = await userApi.getProfile()
         set({ user, isAuthenticated: true, isSessionReady: true })
       },
       logout: async () => {
@@ -45,8 +47,8 @@ export const useAuthStore = create<AuthState>()(
         }
       },
       restoreSession: async () => {
-        if (!getAccessToken()) {
-          set({ isSessionReady: true })
+        if (!getIdToken()) {
+          set({ isSessionReady: true, isAuthenticated: false, user: null })
           return
         }
         try {
